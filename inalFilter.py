@@ -53,14 +53,16 @@ def process_playlist():
     new_playlist = ["#EXTM3U"]
     active_count = 0
 
-    # Fungsi pengecekan per item untuk ThreadPool
     def check_entry(entry):
         meta, url = entry
         if is_link_active(url):
-            return (meta, url, True)
+            # Mengganti kata "INAL" menjadi "CH" (tidak case-sensitive, jadi inal/Inal/INAL akan ikut berubah)
+            # Jika ingin persis huruf kapital semua, bisa diganti meta.replace("INAL", "CH")
+            updated_meta = meta.replace("INAL", "CH").replace("inal", "CH").replace("Inal", "CH")
+            return (updated_meta, url, True)
         return (meta, url, False)
 
-    # Jalankan pengecekan secara bersamaan (maksimal 30 thread sekaligus agar cepat)
+    # Jalankan pengecekan bersamaan (maksimal 30 thread agar cepat)
     with ThreadPoolExecutor(max_workers=30) as executor:
         futures = {executor.submit(check_entry, entry): entry for entry in entries}
         
@@ -70,7 +72,7 @@ def process_playlist():
                 new_playlist.append(meta)
                 new_playlist.append(url)
                 active_count += 1
-                print(f"[AKTIF] {url}")
+                print(f"[AKTIF & RENAME] {meta}")
             else:
                 print(f"[MATI] {url}")
 
@@ -78,7 +80,7 @@ def process_playlist():
     with open("active_playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(new_playlist))
     
-    print(f"Selesai! Dari {total_count} channel, ada {active_count} channel yang aktif.")
+    print(f"Selesai! Dari {total_count} channel, ada {active_count} channel aktif dan namanya sudah diperbarui.")
 
 if __name__ == "__main__":
     process_playlist()
