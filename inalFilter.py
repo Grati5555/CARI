@@ -1,6 +1,6 @@
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# URL Dropbox sumber playlist Anda (sudah diubah parameter &dl=1 agar langsung terunduh)
 SOURCE_URL = "https://dl.dropboxusercontent.com/scl/fi/0gj7vjreta6eb5jtr078n/nov1.m3u?rlkey=mu969r11j8lcq4auh9mwrhs1j&st=9cxjqbg8&dl=1"
 
 def is_link_active(url):
@@ -9,7 +9,7 @@ def is_link_active(url):
             url,
             headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         )
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=3) as response:
             return response.status == 200
     except Exception:
         return False
@@ -29,35 +29,52 @@ def process_playlist():
         return
 
     lines = content.splitlines()
-    new_playlist = ["#EXTM3U"]
+    entries = []
     
+    # Ambil pasangan #EXTINF dan URL-nya
     i = 0
-    active_count = 0
-    total_count = 0
-
     while i < len(lines):
         line = lines[i].strip()
         if line.startswith("#EXTINF:"):
-            total_count += 1
             meta_line = line
             url_line = ""
             if i + 1 < len(lines):
                 url_line = lines[i+1].strip()
             
             if url_line and not url_line.startswith("#"):
-                print(f"Mengecek ({total_count}): {url_line}")
-                if is_link_active(url_line):
-                    new_playlist.append(meta_line)
-                    new_playlist.append(url_line)
-                    active_count += 1
-                    print(" -> AKTIF")
-                else:
-                    print(" -> MATI (Dihapus)")
+                entries.append((meta_line, url_line))
                 i += 2
                 continue
         i += 1
 
-    # Simpan hasil pembersihan ke file active_playlist.m3u
+    total_count = len(entries)
+    print(f"Total channel ditemukan: {total_count}. Mulai pengecekan paralel...")
+
+    new_playlist = ["#EXTM3U"]
+    active_count = 0
+
+    # Fungsi pengecekan per item untuk ThreadPool
+    def check_entry(entry):
+        meta, url = entry
+        if is_link_active(url):
+            return (meta, url, True)
+        return (meta, url, False)
+
+    # Jalankan pengecekan secara bersamaan (maksimal 30 thread sekaligus agar cepat)
+    with ThreadPoolExecutor(max_workers=30) as executor:
+        futures = {executor.submit(check_entry, entry): entry for entry in entries}
+        
+        for future in as_completed(futures):
+            meta, url, is_active = future.result()
+            if is_active:
+                new_playlist.append(meta)
+                new_playlist.append(url)
+                active_count += 1
+                print(f"[AKTIF] {url}")
+            else:
+                print(f"[MATI] {url}")
+
+    # Simpan hasil
     with open("active_playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(new_playlist))
     
