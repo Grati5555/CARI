@@ -5,7 +5,6 @@ SOURCE_URL = "https://dl.dropboxusercontent.com/scl/fi/0gj7vjreta6eb5jtr078n/nov
 
 def is_link_active(url):
     try:
-        # Menggunakan metode GET dengan streaming kecil atau HEAD
         req = urllib.request.Request(
             url,
             headers={
@@ -13,18 +12,26 @@ def is_link_active(url):
                 'Accept': '*/*'
             }
         )
-        # Timeout diperpendek jadi 3 detik agar proses cepat
-        with urllib.request.urlopen(req, timeout=3) as response:
-            # Pastikan status code benar-benar 200 (OK)
-            if response.status == 200:
-                return True
-            else:
+        # Menggunakan timeout 4 detik
+        with urllib.request.urlopen(req, timeout=4) as response:
+            if response.status != 200:
                 return False
-    except urllib.error.HTTPError as e:
-        # Menangkap error spesifik seperti 404, 429, 403, dll.
-        return False
+            
+            # Cek tipe konten (Content-Type) untuk memastikan bukan halaman HTML error
+            content_type = response.headers.get('Content-Type', '').lower()
+            
+            # Jika server mengembalikan halaman HTML (biasanya halaman error 404/500 custom), anggap mati
+            if 'text/html' in content_type:
+                return False
+                
+            # Baca sedikit bytes pertama untuk memastikan ada respons data stream
+            chunk = response.read(512)
+            if not chunk and 'video' not in content_type and 'audio' not in content_type and 'application' not in content_type:
+                return False
+                
+            return True
+            
     except Exception:
-        # Menangkap error koneksi lainnya (timeout, DNS error, dll)
         return False
 
 def process_playlist():
@@ -44,7 +51,6 @@ def process_playlist():
     lines = content.splitlines()
     entries = []
     
-    # Ambil pasangan #EXTINF dan URL-nya
     i = 0
     while i < len(lines):
         line = lines[i].strip()
@@ -61,7 +67,7 @@ def process_playlist():
         i += 1
 
     total_count = len(entries)
-    print(f"Total channel ditemukan: {total_count}. Memulai filter ketat (mengabaikan 404, 429, dll)...")
+    print(f"Total channel ditemukan: {total_count}. Menjalankan filter ketat lanjutan...")
 
     new_playlist = ["#EXTM3U"]
     active_count = 0
@@ -72,7 +78,6 @@ def process_playlist():
             return (meta, url, True)
         return (meta, url, False)
 
-    # ThreadPool dengan 30 worker agar tetap cepat (selesai dalam ~1-2 menit)
     with ThreadPoolExecutor(max_workers=30) as executor:
         futures = {executor.submit(check_entry, entry): entry for entry in entries}
         
@@ -82,15 +87,14 @@ def process_playlist():
                 new_playlist.append(meta)
                 new_playlist.append(url)
                 active_count += 1
-                print(f"[AKTIF - 200] {url}")
+                print(f"[VALID] {url}")
             else:
-                print(f"[DIHAPUS - ERROR/MATI] {url}")
+                print(f"[DIHAPUS] {url}")
 
-    # Simpan hasil pembersihan
     with open("active_playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(new_playlist))
     
-    print(f"Selesai! Dari {total_count} channel, hanya tersisa {active_count} channel yang benar-benar aktif (200 OK).")
+    print(f"Selesai! Dari {total_count} channel, tersisa {active_count} channel yang benar-benar aktif.")
 
 if __name__ == "__main__":
     process_playlist()
