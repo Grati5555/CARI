@@ -1,5 +1,6 @@
 import urllib.request
 import urllib.error
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 SOURCE_URL = "https://dl.dropboxusercontent.com/scl/fi/0gj7vjreta6eb5jtr078n/nov1.m3u?rlkey=mu969r11j8lcq4auh9mwrhs1j&st=9cxjqbg8&dl=1"
@@ -13,28 +14,42 @@ def is_link_active(url):
                 'Accept': '*/*'
             }
         )
-        # Timeout 4 detik
         with urllib.request.urlopen(req, timeout=4) as response:
-            # Jika status code bukan 200 (misal kena redirect aneh), anggap mati
             if response.status != 200:
                 return False
             
             content_type = response.headers.get('Content-Type', '').lower()
-            # Jika server membalas dengan halaman web HTML (biasanya halaman error 404/401/blokiran custom), anggap mati
             if 'text/html' in content_type:
                 return False
                 
             return True
             
-    except urllib.error.HTTPError as e:
-        # INI KUNCINYA: Menangkap SEMUA error HTTP (401, 404, 429, 403, 500, dll) secara mutlak
+    except (urllib.error.HTTPError, urllib.error.URLError, Exception):
         return False
-    except urllib.error.URLError as e:
-        # Menangkap error koneksi / DNS / server mati
-        return False
-    except Exception:
-        # Menangkap error lainnya
-        return False
+
+def clean_and_format_meta(meta_line):
+    # 1. Cek Kategori (group-title). Jika kategorinya INAL atau B INAL, hapus (return None)
+    group_match = re.search(r'group-title="([^"]*)"', meta_line, re.IGNORECASE)
+    if group_match:
+        group_val = group_match.group(1).strip().upper()
+        if group_val in ["INAL", "B INAL"] or "INAL" in group_val:
+            return None  # Kategori dihapus/di-skip
+
+    # 2. Ganti Nama Channel yang mengandung INAL / B INAL menjadi CH
+    parts = meta_line.split(',', 1)
+    if len(parts) == 2:
+        attributes, channel_name = parts
+        
+        # Jika nama channel mengandung kata inal / b inal, ganti jadi CH
+        if re.search(r'\b(b\s*)?inal\b', channel_name, re.IGNORECASE):
+            channel_name = "CH"
+            
+        # Bersihkan juga tvg-name jika ada isinya inal
+        attributes = re.sub(r'tvg-name="[^"]*inal[^"]*"', 'tvg-name="CH"', attributes, flags=re.IGNORECASE)
+        
+        meta_line = f"{attributes},{channel_name}"
+        
+    return meta_line
 
 def process_playlist():
     print("Mengunduh playlist dari Dropbox...")
@@ -63,13 +78,16 @@ def process_playlist():
                 url_line = lines[i+1].strip()
             
             if url_line and not url_line.startswith("#"):
-                entries.append((meta_line, url_line))
+                # Proses filter kategori dan ganti nama
+                processed_meta = clean_and_format_meta(meta_line)
+                if processed_meta is not None:
+                    entries.append((processed_meta, url_line))
                 i += 2
                 continue
         i += 1
 
     total_count = len(entries)
-    print(f"Total channel ditemukan: {total_count}. Memulai penyaringan ketat anti-error...")
+    print(f"Total channel setelah filter kategori: {total_count}. Memulai pengecekan link aktif...")
 
     new_playlist = ["#EXTM3U"]
     active_count = 0
@@ -80,7 +98,6 @@ def process_playlist():
             return (meta, url, True)
         return (meta, url, False)
 
-    # Menggunakan 25 worker agar proses tetap stabil dan akurat
     with ThreadPoolExecutor(max_workers=25) as executor:
         futures = {executor.submit(check_entry, entry): entry for entry in entries}
         
@@ -90,15 +107,14 @@ def process_playlist():
                 new_playlist.append(meta)
                 new_playlist.append(url)
                 active_count += 1
-                print(f"[AKTIF] {url}")
+                print(f"[AKTIF & BERSIH] {url}")
             else:
                 print(f"[DIBUANG - ERROR] {url}")
 
-    # Simpan hasil bersih ke active_playlist.m3u
     with open("active_playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(new_playlist))
     
-    print(f"Selesai! Dari {total_count} channel, tersisa {active_count} channel yang benar-benar bersih dari error.")
+    print(f"Selesai! Tersisa {active_count} channel aktif.")
 
 if __name__ == "__main__":
     process_playlist()
