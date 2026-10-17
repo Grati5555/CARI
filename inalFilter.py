@@ -47,21 +47,33 @@ def process_playlist():
                 url_line = lines[i+1].strip()
             
             if url_line and not url_line.startswith("#"):
-                # Cek apakah kategori (group-title) atau nama channel termasuk yang harus dihapus
-                # Menghapus kategori: PLAYLIST B-CH atau ♦WA ADMIN B-CH♦ (tidak case-sensitive)
-                if re.search(r'group-title=".*?(PLAYLIST B-CH|WA ADMIN B-CH).*?"', meta_line, re.IGNORECASE) or \
-                   re.search(r',(.*?(PLAYLIST B-CH|WA ADMIN B-CH).*?)$', meta_line, re.IGNORECASE):
-                    # Lewati / hapus channel ini
-                    i += 2
-                    continue
+                # Cek apakah kategori (group-title) atau nama channel termasuk yang harus dihapus total
+                # Yaitu PLAYLIST B-INAL atau WA ADMIN B-INAL
+                skip_category = False
                 
-                entries.append((meta_line, url_line))
+                # Cek group-title di dalam meta_line
+                group_match = re.search(r'group-title="([^"]*?)"', meta_line, re.IGNORECASE)
+                if group_match:
+                    g_name = group_match.group(1).upper()
+                    if "PLAYLIST B-INAL" in g_name or "WA ADMIN B-INAL" in g_name:
+                        skip_category = True
+                
+                # Cek juga jika ada teks kategori tersebut langsung di baris meta
+                meta_upper = meta_line.upper()
+                if "PLAYLIST B-INAL" in meta_upper or "WA ADMIN B-INAL" in meta_upper:
+                    skip_category = True
+
+                if not skip_category:
+                    entries.append((meta_line, url_line))
+                else:
+                    print(f"[DIHAPUS KATEGORI] Mengabaikan channel dari kategori terlarang: {meta_line}")
+                
                 i += 2
                 continue
         i += 1
 
     total_count = len(entries)
-    print(f"Total channel setelah membuang kategori B-CH: {total_count}. Mulai filter link aktif...")
+    print(f"Total channel tersisa setelah filter kategori: {total_count}. Mulai cek link aktif...")
 
     new_playlist = ["#EXTM3U"]
     active_count = 0
@@ -69,10 +81,10 @@ def process_playlist():
     def check_entry(entry):
         meta, url = entry
         if is_link_active(url):
-            # 1. Ubah nama channel yang mengandung INAL menjadi CH
+            # Ubah nama channel yang mengandung INAL menjadi CH
             updated_meta = meta.replace("INAL", "CH").replace("inal", "CH").replace("Inal", "CH")
             
-            # 2. Ubah kategori group-title yang mengandung B-INAL atau INAL menjadi HBRN
+            # Ubah kategori group-title yang mengandung B-INAL atau INAL menjadi HBRN (jika ada sisa kategori lain)
             updated_meta = re.sub(r'group-title="([^"]*?(?:B-INAL|INAL)[^"]*?)"', 'group-title="HBRN"', updated_meta, flags=re.IGNORECASE)
             
             return (updated_meta, url, True)
@@ -94,7 +106,7 @@ def process_playlist():
     with open("active_playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(new_playlist))
     
-    print(f"Selesai! Kategori B-CH berhasil dibuang. Tersisa {active_count} channel aktif.")
+    print(f"Selesai! Tersisa {active_count} channel aktif.")
 
 if __name__ == "__main__":
     process_playlist()
