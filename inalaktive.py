@@ -1,5 +1,4 @@
 import urllib.request
-import re
 
 # URL Dropbox sumber playlist Anda
 SOURCE_URL = "https://dl.dropboxusercontent.com/scl/fi/0gj7vjreta6eb5jtr078n/nov1.m3u?rlkey=mu969r11j8lcq4auh9mwrhs1j&st=9cxjqbg8&dl=1"
@@ -10,7 +9,6 @@ def is_link_active(url):
             url,
             headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         )
-        # Cukup gunakan metode HEAD atau GET dengan timeout cepat
         with urllib.request.urlopen(req, timeout=5) as response:
             return response.status == 200
     except Exception:
@@ -42,7 +40,6 @@ def process_playlist():
         if line.startswith("#EXTINF:"):
             total_count += 1
             meta_line = line
-            # Cari baris URL berikutnya
             url_line = ""
             if i + 1 < len(lines):
                 url_line = lines[i+1].strip()
@@ -50,7 +47,7 @@ def process_playlist():
             if url_line and not url_line.startswith("#"):
                 print(f"Mengecek ({total_count}): {url_line}")
                 if is_link_active(url_line):
-                    new_playlist.append(meta_link if 'meta_link' in locals() else meta_line)
+                    new_playlist.append(meta_line)
                     new_playlist.append(url_line)
                     active_count += 1
                     print(" -> AKTIF")
@@ -60,7 +57,7 @@ def process_playlist():
                 continue
         i += 1
 
-    # Simpan ke file output
+    # Simpan ke file output active_plinal.m3u
     with open("active_plinal.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(new_playlist))
     
