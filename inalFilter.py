@@ -14,7 +14,9 @@ def is_link_active(url):
             }
         )
         with urllib.request.urlopen(req, timeout=4) as response:
-            return response.status in [200, 206]
+            if response.status in [200, 206]:
+                return True
+            return False
     except Exception:
         return False
 
@@ -35,7 +37,6 @@ def process_playlist():
     lines = content.splitlines()
     entries = []
     
-    # Ambil pasangan #EXTINF dan URL-nya
     i = 0
     while i < len(lines):
         line = lines[i].strip()
@@ -46,20 +47,13 @@ def process_playlist():
                 url_line = lines[i+1].strip()
             
             if url_line and not url_line.startswith("#"):
-                # Cek apakah metadata mengandung kategori INAL atau B-INAL (case-insensitive)
-                meta_upper = meta_line.upper()
-                if "INAL" in meta_upper or "B-INAL" in meta_upper:
-                    # Lewati / hapus channel ini karena mengandung kategori terlarang
-                    i += 2
-                    continue
-                
                 entries.append((meta_line, url_line))
                 i += 2
                 continue
         i += 1
 
     total_count = len(entries)
-    print(f"Total channel setelah filter kategori INAL/B-INAL: {total_count}. Mulai pengecekan link...")
+    print(f"Total channel ditemukan: {total_count}. Mulai filter link aktif & ubah kategori...")
 
     new_playlist = ["#EXTM3U"]
     active_count = 0
@@ -67,12 +61,16 @@ def process_playlist():
     def check_entry(entry):
         meta, url = entry
         if is_link_active(url):
-            # Mengubah sisa nama channel yang masih mengandung kata INAL menjadi CH
+            # 1. Ubah nama channel yang mengandung INAL menjadi CH
             updated_meta = meta.replace("INAL", "CH").replace("inal", "CH").replace("Inal", "CH")
+            
+            # 2. Ubah kategori group-title yang mengandung B-INAL atau INAL menjadi HBRN
+            # Contoh: group-title="B-INAL" atau group-title="SPORTS INAL" menjadi group-title="HBRN"
+            updated_meta = re.sub(r'group-title="([^"]*?(?:B-INAL|INAL)[^"]*?)"', 'group-title="HBRN"', updated_meta, flags=re.IGNORECASE)
+            
             return (updated_meta, url, True)
         return (meta, url, False)
 
-    # Jalankan pengecekan bersamaan (max 20 thread)
     with ThreadPoolExecutor(max_workers=20) as executor:
         futures = {executor.submit(check_entry, entry): entry for entry in entries}
         
@@ -84,13 +82,12 @@ def process_playlist():
                 active_count += 1
                 print(f"[AKTIF] {url}")
             else:
-                print(f"[DIHAPUS/MATI/404] {url}")
+                print(f"[MATI/DIHAPUS] {url}")
 
-    # Simpan hasil akhir
     with open("active_playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(new_playlist))
     
-    print(f"Selesai! Tersisa {active_count} channel aktif yang bersih dari kategori INAL/B-INAL.")
+    print(f"Selesai! Dari {total_count} channel, tersisa {active_count} channel aktif dengan kategori & nama yang diperbarui.")
 
 if __name__ == "__main__":
     process_playlist()
