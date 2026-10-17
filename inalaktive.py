@@ -61,7 +61,7 @@ def process_playlist():
         i += 1
 
     # Simpan ke file output
-    with open("active_playlist.m3u", "w", encoding="utf-8") as f:
+    with open("active_plinal.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(new_playlist))
     
     print(f"Selesai! Dari {total_count} channel, ada {active_count} channel yang aktif.")
