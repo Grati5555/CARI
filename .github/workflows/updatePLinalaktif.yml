@@ -1,0 +1,29 @@
+name: Auto Update & Clean IPTV Playlist
+
+on:
+  schedule:
+    # Berjalan otomatis setiap 6 jam sekali
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Bisa dijalankan manual lewat tab Actions
+
+jobs:
+  update-playlist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run filter script
+        run: python inalaktive.py
+
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add active_plinal.m3u
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update & clean IPTV playlist" && git push)
