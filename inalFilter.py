@@ -49,7 +49,7 @@ def process_playlist():
             if url_line and not url_line.startswith("#"):
                 skip_category = False
                 
-                # Cek kategori terlarang untuk dihapus
+                # Hapus kategori PLAYLIST B-INAL atau WA ADMIN B-INAL beserta isinya
                 group_match = re.search(r'group-title="([^"]*?)"', meta_line, re.IGNORECASE)
                 if group_match:
                     g_name = group_match.group(1).upper()
@@ -79,12 +79,8 @@ def process_playlist():
             # 1. Ubah nama channel yang mengandung INAL menjadi CH
             updated_meta = meta.replace("INAL", "CH").replace("inal", "CH").replace("Inal", "CH")
             
-            # 2. Ganti logo lama tertentu dengan logo baru
-            updated_meta = re.sub(
-                r'tvg-logo="https://jihulab\.com/iptv2571913/CH-iptv/Euro2024/-/raw/main/LOGO_TELE\.jpg"', 
-                'tvg-logo="https://raw.githubusercontent.com/Zero4sukses/LOGO/main/tv-olahraga.png"', 
-                updated_meta
-            )
+            # 2. HAPUS SEMUA LOGO (Menghapus atribut tvg-logo="..." beserta isinya)
+            updated_meta = re.sub(r'\s*tvg-logo="[^"]*?"', '', updated_meta, flags=re.IGNORECASE)
             
             # 3. Ubah kategori group-title yang mengandung B-INAL atau INAL menjadi HBRN
             updated_meta = re.sub(r'group-title="([^"]*?(?:B-INAL|INAL)[^"]*?)"', 'group-title="HBRN"', updated_meta, flags=re.IGNORECASE)
@@ -105,7 +101,7 @@ def process_playlist():
     with open("active_playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(new_playlist))
     
-    print(f"Selesai! Tersisa {active_count} channel aktif dengan logo baru yang diperbarui.")
+    print(f"Selesai! Tersisa {active_count} channel aktif tanpa logo[span_2](start_span)[span_2](end_span).")
 
 if __name__ == "__main__":
     process_playlist()
